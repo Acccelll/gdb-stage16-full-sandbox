@@ -27,6 +27,7 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
     private CrowdRushGame game;
     private Transform playerRoot;
     private Transform crowdRoot;
+    private Transform decoratedFinish;
     private readonly List<Transform> eventRoots = new List<Transform>();
     private readonly List<GateLabel> gateLabels = new List<GateLabel>();
     private readonly List<GameObject> roadDecor = new List<GameObject>();
@@ -35,7 +36,6 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
     private FieldInfo crowdCountField;
     private FieldInfo nearbyChoiceField;
     private FieldInfo battleEnemyStartField;
-    private FieldInfo playerZField;
 
     private object lastState;
     private int lastCrowd = -1;
@@ -46,7 +46,6 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
     private bool feedbackPositive;
     private float scanAt;
     private float decorCenterZ = float.MinValue;
-    private bool finishDecorated;
 
     private GUIStyle positiveStyle;
     private GUIStyle negativeStyle;
@@ -82,7 +81,6 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
         crowdCountField = t.GetField("crowdCount", flags);
         nearbyChoiceField = t.GetField("nearbyChoice", flags);
         battleEnemyStartField = t.GetField("battleEnemyStart", flags);
-        playerZField = t.GetField("playerZ", flags);
     }
 
     private void BuildMaterials()
@@ -109,7 +107,11 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
             scanAt = Time.unscaledTime + 0.12f;
         }
 
-        if (cam == null || playerRoot == null) return;
+        if (cam == null || playerRoot == null)
+        {
+            HideRoadDecor();
+            return;
+        }
 
         ConfigureCamera();
         AnimatePlayerCrowd();
@@ -127,8 +129,14 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
         GameObject p = GameObject.Find("PlayerRoot");
         if (p != null)
         {
-            playerRoot = p.transform;
-            crowdRoot = playerRoot.Find("CrowdRoot");
+            if (playerRoot != p.transform)
+            {
+                playerRoot = p.transform;
+                crowdRoot = playerRoot.Find("CrowdRoot");
+                decorCenterZ = float.MinValue;
+                decoratedFinish = null;
+                lastCrowd = -1;
+            }
         }
         else
         {
@@ -159,15 +167,11 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
             }
         }
 
-        if (state != null && lastState != null && !state.Equals(lastState))
+        if (state != null && lastState != null && !state.Equals(lastState) && state.ToString() == "Battle")
         {
-            string name = state.ToString();
-            if (name == "Battle")
-            {
-                feedbackText = "BATALHA";
-                feedbackPositive = false;
-                feedbackUntil = Time.unscaledTime + 0.7f;
-            }
+            feedbackText = "BATALHA";
+            feedbackPositive = false;
+            feedbackUntil = Time.unscaledTime + 0.7f;
         }
 
         lastCrowd = currentCrowd;
@@ -178,6 +182,7 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
     {
         eventRoots.Clear();
         gateLabels.Clear();
+
         TextMesh[] texts = Resources.FindObjectsOfTypeAll<TextMesh>();
         for (int i = 0; i < texts.Length; i++)
         {
@@ -198,6 +203,7 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
             Renderer rr = tm.GetComponent<Renderer>();
             if (rr != null) rr.enabled = false;
             tm.characterSize = 0.001f;
+            tm.fontSize = 1;
         }
 
         Transform[] all = Resources.FindObjectsOfTypeAll<Transform>();
@@ -307,12 +313,15 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
             if (d < -2.2f) continue;
             if (d < d1)
             {
-                second = first; d2 = d1;
-                first = r; d1 = d;
+                second = first;
+                d2 = d1;
+                first = r;
+                d1 = d;
             }
             else if (d < d2)
             {
-                second = r; d2 = d;
+                second = r;
+                d2 = d;
             }
         }
 
@@ -323,7 +332,6 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
             float d = EventZ(r) - pz;
             bool battle = r.name.StartsWith("EnemyCrowd_", StringComparison.Ordinal) && d > -3.2f && d < 4f;
             bool show = r == first && d < 28f;
-            // A second event can be hinted only at long range; this gives depth without overlap.
             show |= r == second && d > 18f && d < 33f;
             show |= battle;
             if (r.gameObject.activeSelf != show) r.gameObject.SetActive(show);
@@ -337,13 +345,14 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
         if (Mathf.Abs(snapped - decorCenterZ) < 0.1f && roadDecor.Count > 0) return;
         decorCenterZ = snapped;
 
-        EnsureRoadDecorPool(36);
+        EnsureRoadDecorPool(54);
         int idx = 0;
         for (int i = -5; i <= 12; i++)
         {
             float z = snapped + i * 4f;
             PositionDecor(roadDecor[idx++], new Vector3(0f, 0.015f, z), new Vector3(0.12f, 0.025f, 1.55f), dashMaterial);
             PositionDecor(roadDecor[idx++], new Vector3(-4.72f, 0.03f, z), new Vector3(0.07f, 0.055f, 3.7f), railMaterial);
+            PositionDecor(roadDecor[idx++], new Vector3(4.72f, 0.03f, z), new Vector3(0.07f, 0.055f, 3.7f), railMaterial);
         }
     }
 
@@ -361,6 +370,11 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
         }
     }
 
+    private void HideRoadDecor()
+    {
+        for (int i = 0; i < roadDecor.Count; i++) if (roadDecor[i] != null) roadDecor[i].SetActive(false);
+    }
+
     private void PositionDecor(GameObject go, Vector3 pos, Vector3 scale, Material material)
     {
         go.transform.position = pos;
@@ -372,27 +386,37 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
 
     private void DecorateFinish()
     {
-        if (finishDecorated) return;
         Transform finish = null;
-        for (int i = 0; i < eventRoots.Count; i++) if (eventRoots[i] != null && eventRoots[i].name == "Finish") { finish = eventRoots[i]; break; }
-        if (finish == null) return;
-
-        float z = EventZ(finish);
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < eventRoots.Count; i++)
         {
-            float x = -3.45f + i * 0.77f;
-            GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            tile.name = "FinishChecker";
-            tile.transform.SetParent(finish, true);
-            tile.transform.position = new Vector3(x, 3.55f, z - 0.03f);
-            tile.transform.localScale = new Vector3(0.37f, 0.18f, 0.08f);
-            Renderer r = tile.GetComponent<Renderer>();
-            r.sharedMaterial = i % 2 == 0 ? finishDarkMaterial : dashMaterial;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            Collider c = tile.GetComponent<Collider>();
-            if (c != null) Destroy(c);
+            if (eventRoots[i] != null && eventRoots[i].name == "Finish")
+            {
+                finish = eventRoots[i];
+                break;
+            }
         }
-        finishDecorated = true;
+        if (finish == null || finish == decoratedFinish) return;
+
+        bool alreadyDecorated = finish.Find("FinishChecker_0") != null;
+        if (!alreadyDecorated)
+        {
+            float z = EventZ(finish);
+            for (int i = 0; i < 10; i++)
+            {
+                float x = -3.45f + i * 0.77f;
+                GameObject tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                tile.name = "FinishChecker_" + i;
+                tile.transform.SetParent(finish, true);
+                tile.transform.position = new Vector3(x, 3.55f, z - 0.03f);
+                tile.transform.localScale = new Vector3(0.37f, 0.18f, 0.08f);
+                Renderer r = tile.GetComponent<Renderer>();
+                r.sharedMaterial = i % 2 == 0 ? finishDarkMaterial : dashMaterial;
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                Collider c = tile.GetComponent<Collider>();
+                if (c != null) Destroy(c);
+            }
+        }
+        decoratedFinish = finish;
     }
 
     private float EventZ(Transform root)
@@ -466,7 +490,11 @@ public sealed class CrowdRushPresentationV4 : MonoBehaviour
             Transform r = eventRoots[i];
             if (r == null || !r.gameObject.activeInHierarchy) continue;
             float d = EventZ(r) - pz;
-            if (d > 1.0f && d < best && d < 28f) { best = d; nearest = r; }
+            if (d > 1.0f && d < best && d < 28f)
+            {
+                best = d;
+                nearest = r;
+            }
         }
         return nearest;
     }
