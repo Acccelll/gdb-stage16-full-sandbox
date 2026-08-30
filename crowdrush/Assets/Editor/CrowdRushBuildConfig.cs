@@ -17,11 +17,13 @@ public static class CrowdRushBuildConfig
     {
         PlayerSettings.companyName = "CrowdRush";
         PlayerSettings.productName = "Crowd Rush";
-        PlayerSettings.bundleVersion = "0.1.0";
+        PlayerSettings.bundleVersion = "0.2.0";
         PlayerSettings.defaultInterfaceOrientation = UIOrientation.Portrait;
         PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.crowdrush.game");
         PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+        PlayerSettings.Android.bundleVersionCode = 3;
+        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
         EditorUserBuildSettings.buildAppBundle = false;
     }
 }
